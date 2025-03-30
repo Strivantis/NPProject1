@@ -32,6 +32,22 @@ struct CommandUnit {
     bool newGroup = false;
 };
 
+void flushFdToStdout(int fd) {
+    if (fd < 0) return;
+    string flushed;
+    char buffer[4096];
+    ssize_t n;
+    while ((n = read(fd, buffer, sizeof(buffer))) > 0) {
+        flushed.append(buffer, n);
+    }
+    close(fd);
+    if (!flushed.empty() && flushed.back() != '\n') {
+        flushed.push_back('\n');
+    }
+    cout << flushed;
+    cout.flush();
+}
+
 vector<string> tokenize(const string &input) {
     vector<string> tokens;
     istringstream iss(input);
@@ -43,13 +59,7 @@ vector<string> tokenize(const string &input) {
 
 vector<CommandUnit> parseLine(const string &input) {
     vector<CommandUnit> result;
-    vector<string> tokens;
-    {
-        istringstream iss(input);
-        string tk;
-        while (iss >> tk)
-            tokens.push_back(tk);
-    }
+    vector<string> tokens = tokenize(input);
 
     bool inNewGroup = true;
     CommandUnit currentCmd;
@@ -195,18 +205,7 @@ bool handleBuiltInCommands(const vector<string> &tokens, bool &shouldExit) {
     const string &cmd = tokens[0];
     if (cmd.size() >= 4 && cmd.rfind("exit", 0) == 0) {
         int fd = MemoryPipeManager::getInputFD(true);
-        if (fd != -1) {
-            string flushed;
-            char buffer[4096];
-            ssize_t n;
-            while ((n = read(fd, buffer, sizeof(buffer))) > 0) {
-                flushed.append(buffer, n);
-            }
-            close(fd);
-            if (!flushed.empty() && flushed.back() != '\n') flushed.push_back('\n');
-            cout << flushed;
-            cout.flush();
-        }
+        flushFdToStdout(fd);
         exit(0);
     }
     if (cmd == "setenv" && tokens.size() == 3) {
@@ -378,16 +377,7 @@ int main() {
         string line;
         if (!getline(cin, line)) {
             int fd = MemoryPipeManager::getInputFD(true);
-            if (fd != -1) {
-                string flushed;
-                char buffer[4096];
-                ssize_t n;
-                while ((n = read(fd, buffer, sizeof(buffer))) > 0) flushed.append(buffer, n);
-                close(fd);
-                if (!flushed.empty() && flushed.back() != '\n') flushed.push_back('\n');
-                cout << flushed;
-                cout.flush();
-            }
+            flushFdToStdout(fd);
             break;
         }
         vector<string> tokens = tokenize(line);
@@ -405,16 +395,7 @@ int main() {
         } else {
             MemoryPipeManager::decreaseCountdown();
             int fd = MemoryPipeManager::getInputFD(true);
-            if (fd != -1) {
-                string flushed;
-                char buffer[4096];
-                ssize_t n;
-                while ((n = read(fd, buffer, sizeof(buffer))) > 0) flushed.append(buffer, n);
-                close(fd);
-                if (!flushed.empty() && flushed.back() != '\n') flushed.push_back('\n');
-                cout << flushed;
-                cout.flush();
-            }
+            flushFdToStdout(fd);
         }
         while (waitpid(-1, nullptr, WNOHANG) > 0) {}
         if (shouldExit) break;
